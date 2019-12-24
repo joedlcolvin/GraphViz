@@ -7,12 +7,21 @@ void main()
 	import std.conv : text;
 	import nanomsg : BindTo;
 	import std.exception : enforce;
+	import std.stdio;
 
-	auto frontendSocket = NanoSocket(NanoSocket.Protocol.pair, BindTo("ipc://graphViz"));
+	auto frontendSocket = NanoSocket(NanoSocket.Protocol.pair, BindTo("ipc:///tmp/graphViz.ipc"));
+
+	writeln(__LINE__);
 
 	auto settingsMessage = frontendSocket.getMessage();
+	writeln(__LINE__);
+
 	enforce(settingsMessage.messageType == FrontendMessageType.settings);
+	writeln(__LINE__);
+
 	auto settings = settingsMessage.settings;
+
+	writeln(settings);
 
 	auto network = new Network(settings.numNodes);
 
@@ -63,8 +72,11 @@ auto waitForStartMessage(ref NanoSocket socket)
 auto getMessage(ref NanoSocket socket)
 {
 	import std.json : parseJSON;
+	auto jsonStr = cast(string) socket.receive().bytes;
+	import std.stdio;
+	writeln(jsonStr);
 	return FrontendMessage.fromJson(
-		parseJSON((cast(string) socket.receive().bytes)));
+		parseJSON(jsonStr));
 }
 
 auto tryGetMessage(ref NanoSocket socket)

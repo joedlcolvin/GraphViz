@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.UI;
 using System;
+using System.Runtime.InteropServices;
 
 public class Net : MonoBehaviour
 {
@@ -18,8 +19,6 @@ public class Net : MonoBehaviour
 	public int arrangeIterations = 50;
 
 	public bool paused;
-
-	public string pipePath = @"netPipe";
 
 	Network network;
 
@@ -37,7 +36,11 @@ public class Net : MonoBehaviour
 	float startTime1;
 	float startTime2;
 
-	IEnumerator opinionCoroutine;
+	[DllImport ("libnano_shim.so")]
+	private static extern int connect ();
+
+	[DllImport ("libnano_shim.so")]
+	private static extern int sendSettings (string a, long b);
 
 	void Start()
 	{
@@ -56,20 +59,26 @@ public class Net : MonoBehaviour
 		interactionType = settings.GetComponent<SettingsVars>().interactionType;
 		arrangeIterations = settings.GetComponent<SettingsVars>().arrangeIterations;
 
+		print("hi");
+		int r = connect();
+		print(r + " again");
+
+		String msg = "{ \"messageType\" : \"settings\", \"settings\" : { \"numNodes\" : 100, \"interactionType\" : 1 } }";
+		r = sendSettings(msg, msg.Length);
+		Debug.Log(r + " sent settings");
 		// 1. Pass settings to back end
 		// 2. Ask backend to pass back generated network
+
+		GenerateObjects(network, arrangeIterations);
 		// 3. Tell backend to start model
 
-		network = new Network(numNodes);
-		GenerateObjects(network, arrangeIterations);
-
-		opinionCoroutine = OpinionRun(opIterations, network, opinionRadius, deltaOpinion, ForcedLeftSphere, ForcedRightSphere);
-		StartCoroutine(opinionCoroutine);
 	}
 
 	void Update()
 	{
-		// Check for pause, and send to back end
+		// 1. Check for pause/start/stop, and send to back end
+
+		// 2. Check for forced nodes and send to backend
 
 		// WATCH REARRANGMENT
 
@@ -87,112 +96,6 @@ public class Net : MonoBehaviour
 		{
 			ColorSpheres(network.nodes);
 			startTime1 = Time.time;
-		}
-		if (Time.time - startTime2 > 1f && !gameOver)
-		{
-			float meanOp = network.GetMeanOpinion();
-			meanOpinionUI.text = "Mean Opinion: " + meanOp.ToString();
-			startTime2 = Time.time;
-		}
-	}
-
-	IEnumerator OpinionRun(int iterations, Network net, float radius, float deltaOp, GameObject ForcedLeftSphere, GameObject ForcedRightSphere)
-	{
-		using (StreamWriter pipe = File.CreateText(pipePath))
-		{
-			for(int i=0;i<iterations;i++)
-			{
-				while(paused) yield return null;
-				// Force opinion
-				ForceOpinion(ForcedLeftSphere, ForcedRightSphere);
-
-				// Update opinions
-				UpdateOpinion(net, radius, deltaOp);
-
-				// Make JSON string
-				string nodesJson = JsonUtility.ToJson(net.nodes);
-				print(nodesJson);
-
-				// Write to file
-				pipe.Write(nodesJson);
-				pipe.FlushAsync();
-
-				yield return null;
-			}
-		}
-		gameOver = true;
-		print("Game Over. Player " + (Mathf.Sign(net.GetMeanOpinion()-0.5f)+1)/2 + " won!");
-	}
-
-	void UpdateOpinion(Network net, float radius, float deltaOp)
-	{
-		foreach(KeyValuePair<int, Edge> edge in net.edges)
-		{
-			Node fromNode = net.nodes[edge.Value.fromNodeId];
-			Node toNode = net.nodes[edge.Value.toNodeId];
-			float fromOp = fromNode.opinion;
-			float toOp = toNode.opinion;
-			(float, float) opPair = OpinionInteraction(fromOp, toOp, radius, deltaOp);
-			(fromNode.opinion, toNode.opinion) = opPair;
-		}
-	}
-
-	(float, float) OpinionInteraction(float fromOp, float toOp, float radius, float deltaOp)
-	{
-		// If within radius, fromOp moves deltaOp towards toOp
-		// Otherwise, both opinions stay the same
-		// Opinions stay in interval (0,1)
-		if(interactionType == 0) {
-			if(Mathf.Abs(fromOp-toOp)<radius)
-			{
-				fromOp += Mathf.Sign(toOp-fromOp)*deltaOp;
-				fromOp = Mathf.Min(1f,fromOp);
-				fromOp = Mathf.Max(0f,fromOp);
-			}
-			return (fromOp, toOp);
-		} else if (interactionType == 1) {
-			if(Mathf.Abs(fromOp-toOp)<radius)
-			{
-				float newFromOp = fromOp + Mathf.Sign(toOp-fromOp)*deltaOp;
-				float newToOp = toOp + Mathf.Sign(fromOp-toOp)*deltaOp;
-				//fromOp += Mathf.Sign(toOp-fromOp)*deltaOp;
-				fromOp = newFromOp;
-				fromOp = Mathf.Min(1f,fromOp);
-				fromOp = Mathf.Max(0f,fromOp);
-
-				toOp = newToOp;
-				toOp = Mathf.Min(1f,toOp);
-				toOp = Mathf.Max(0f,toOp);
-			}
-			return (fromOp, toOp);
-		} else if (interactionType == 2) {
-			if(Mathf.Abs(fromOp-toOp)<radius)
-			{
-				float newFromOp = fromOp + Mathf.Sign(toOp-fromOp)*deltaOp;
-				float newToOp = toOp + Mathf.Sign(fromOp-toOp)*deltaOp;
-				//fromOp += Mathf.Sign(toOp-fromOp)*deltaOp;
-				fromOp = newFromOp;
-				fromOp = Mathf.Min(1f,fromOp);
-				fromOp = Mathf.Max(0f,fromOp);
-
-				toOp = newToOp;
-				toOp = Mathf.Min(1f,toOp);
-				toOp = Mathf.Max(0f,toOp);
-			} else {
-				float newFromOp = fromOp - Mathf.Sign(toOp-fromOp)*deltaOp;
-				float newToOp = toOp - Mathf.Sign(fromOp-toOp)*deltaOp;
-				//fromOp += Mathf.Sign(toOp-fromOp)*deltaOp;
-				fromOp = newFromOp;
-				fromOp = Mathf.Min(1f,fromOp);
-				fromOp = Mathf.Max(0f,fromOp);
-
-				toOp = newToOp;
-				toOp = Mathf.Min(1f,toOp);
-				toOp = Mathf.Max(0f,toOp);
-			}
-			return (fromOp, toOp);
-		} else {
-			return (-1,-1);
 		}
 	}
 
@@ -473,7 +376,6 @@ public class Net : MonoBehaviour
 		}
 	}
 
-	[Serializable]
 	public class Node
 	{
 		//Node variables
@@ -494,7 +396,6 @@ public class Net : MonoBehaviour
 		}
 	}
 
-	[Serializable]
 	public class Edge
 	{
 		//Edge variables
