@@ -56,6 +56,10 @@ public class Net : MonoBehaviour
 		interactionType = settings.GetComponent<SettingsVars>().interactionType;
 		arrangeIterations = settings.GetComponent<SettingsVars>().arrangeIterations;
 
+		// 1. Pass settings to back end
+		// 2. Ask backend to pass back generated network
+		// 3. Tell backend to start model
+
 		network = new Network(numNodes);
 		GenerateObjects(network, arrangeIterations);
 
@@ -65,6 +69,8 @@ public class Net : MonoBehaviour
 
 	void Update()
 	{
+		// Check for pause, and send to back end
+
 		// WATCH REARRANGMENT
 
 		//if (Time.time - startTime > 0.2f)
