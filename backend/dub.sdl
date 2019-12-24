@@ -1,0 +1,5 @@
+name "backend"
+description "backend"
+authors "Joseph Colvin"
+copyright "Copyright © 2019, Joseph Colvin"
+license "proprietary"

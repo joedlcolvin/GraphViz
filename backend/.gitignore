@@ -1,0 +1,15 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/backend
+backend.so
+backend.dylib
+backend.dll
+backend.a
+backend.lib
+backend-test-*
+*.exe
+*.o
+*.obj
+*.lst
