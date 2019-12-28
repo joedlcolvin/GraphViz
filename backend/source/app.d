@@ -8,6 +8,7 @@ void main()
 	import nanomsg : BindTo;
 	import std.exception : enforce;
 	import std.stdio;
+	import asdf;
 
 	auto frontendSocket = NanoSocket(NanoSocket.Protocol.pair, BindTo("ipc:///tmp/graphViz.ipc"));
 
@@ -25,9 +26,15 @@ void main()
 
 	auto network = new Network(settings.numNodes);
 
-	// TODO: send network to frontend
-
+	// TODO send nodes and edges as lists
+	//string str = BackendMessage.fromNetwork(BackendMessageType.nodes, network).jsonString;
+	//frontendSocket.send(BackendMessage.fromNetwork(BackendMessageType.nodes, network).jsonString);
+	frontendSocket.send("Ping");
+	//writeln(str);
+	//str = BackendMessage.fromNetwork(BackendMessageType.edges, network).jsonString;
+	//frontendSocket.send(BackendMessage.fromNetwork(BackendMessageType.edges, network).jsonString);
 	frontendSocket.waitForStartMessage();
+	writeln(__LINE__);
 
 	while (true)
 	{
@@ -41,7 +48,7 @@ void main()
 					frontendSocket.waitForStartMessage();
 					break;
 				case FrontendMessageType.stop:
-					network = new Network(settings.numNodes);
+					// Implement some sort of stop message send or something
 					frontendSocket.waitForStartMessage();
 					break;
 				default:
@@ -95,6 +102,7 @@ auto tryGetMessage(ref NanoSocket socket)
 enum FrontendMessageType
 {
 	settings,
+	forcing,
 	start,
 	pause,
 	stop
@@ -115,6 +123,48 @@ struct FrontendMessage
 		msg.messageType = json["messageType"].str.to!FrontendMessageType;
 		if (msg.messageType == FrontendMessageType.settings)
 			msg.settings = Settings.fromJson(json["settings"]);
+		//else if(msg.messageType == FrontendMessageType.forcing)
+		//	msg.settings = Settings.fromJson(json["forcing"]);
+		return msg;
+	}
+}
+
+enum BackendMessageType
+{
+	nodes,
+	edges
+}
+
+struct BackendMessage
+{
+	import std.json;
+	import asdf;
+
+	BackendMessageType messageType;
+	string jsonString;
+	Node[] nodes;
+	Edge[] edges;
+	static BackendMessage fromNetwork(BackendMessageType type, Network net)
+	{
+		BackendMessage msg;
+		msg.messageType = type;
+		JSONValue jj;
+		switch (type)
+		{
+			case BackendMessageType.nodes:
+				msg.nodes = net.nodes.values;
+				jj = ["messageType":"nodes"];
+				jj.object["nodes"] = parseJSON(msg.nodes.serializeToJson());
+				break;
+			case BackendMessageType.edges:
+				msg.edges = net.edges.values;
+				jj = ["messageType":"edges"];
+				jj.object["edges"] = parseJSON(msg.edges.serializeToJson());
+				break;
+			default:
+				throw new Exception("Unexpected BackendMessageType");
+		}
+		msg.jsonString = jj.toString;
 		return msg;
 	}
 }
@@ -123,12 +173,19 @@ struct Settings
 {
 	import std.json : JSONValue;
 
-	int interactionType;
 	int numNodes;
+	int totalInteractions;
+	int interactionType;
+	float opinionRadius;
+	float deltaOp;
 
 	static Settings fromJson(JSONValue json)
 	{
-		return Settings(cast(int) json["interactionType"].integer, cast(int) json["numNodes"].integer);
+		return Settings(cast(int) json["interactionType"].integer, 
+				cast(int) json["numNodes"].integer,
+				cast(int) json["totalInteractions"].integer,
+				cast(float) json["opinionRadius"].floating,
+				cast(float) json["deltaOp"].floating);
 	}
 }
 

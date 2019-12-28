@@ -1,20 +1,23 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Events;
 
 public class InGameUi : MonoBehaviour
 {
 
 	public GameObject inGameMenu;
-	public GameObject net;
 	public GameObject camera;
 
 	GameObject selector;
+
+	public UnityEvent pause;
 
 	float r;
 
 	void Start()
 	{
+		UnityEvent pause = new UnityEvent();
 		selector = this.transform.Find("Selector").gameObject;
 	}
 
@@ -23,8 +26,10 @@ public class InGameUi : MonoBehaviour
 		if (Input.GetKeyDown(KeyCode.Escape))
 		{
 			inGameMenu.SetActive(true);
-			net.GetComponent<Net>().paused = true;
+			pause.Invoke();
 		}
+
+		// Rescale selector based on distance from selected node
 		r = camera.GetComponent<CameraMovement>().r;
 		selector.transform.localScale = Vector3.one*(3/(r));
 	}

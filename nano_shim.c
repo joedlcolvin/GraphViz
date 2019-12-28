@@ -26,16 +26,40 @@ int connect()
 	return 0;
 }
 
-int sendSettings(char* settings, size_t length)
+int send(char* jsonString, size_t length)
 {
-	fprintf(logFile, "%s\n", settings);
+	fprintf(logFile, "%s\n", "send()");
+	fprintf(logFile, "%s\n", jsonString);
 	fprintf(logFile, "%ld\n", length);
-	int ret = nn_send(backendSocket, settings, length, 0);
-	int errCode = nn_errno();
-	fprintf(logFile, "%d %s\n", ret, nn_strerror(errCode));
-	fclose(logFile);
+	int ret = nn_send(backendSocket, jsonString, length, 0);
 	if (ret < 0)
+	{
+		int errCode = nn_errno();
+		fprintf(logFile, "%d %s\n", errCode, nn_strerror(errCode));
+		fclose(logFile);
 		return -1;
+	}
+	fclose(logFile);
 	return 0;
 }
 
+char* receive()
+{
+	fprintf(logFile, "%s\n", "receive()");
+	char* msg;
+	void* buf = NULL;
+	int n_bytes = nn_recv(backendSocket, buf, NN_MSG, 0);
+	if (n_bytes < 0)
+	{
+		int errCode = nn_errno();
+		fprintf(logFile, "%d %s\n", n_bytes, nn_strerror(errCode));
+		fclose(logFile);
+	}
+	else
+	{
+		msg = (char *)buf;
+		fprintf(logFile, "%s\n", msg);
+		fclose(logFile);
+	}
+	return msg;
+}

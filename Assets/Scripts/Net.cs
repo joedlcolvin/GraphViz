@@ -4,23 +4,18 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Events;
 using System;
 using System.Runtime.InteropServices;
+using System.Reflection;
+using MyClasses;
 
 public class Net : MonoBehaviour
 {
-
-	public int numNodes = 100;
-	public float opinionRadius = 0.5f;
-	public float deltaOpinion = 0.01f;
-	public int opIterations = 10000;
-	public float vizRadius = 10;
-	public int interactionType = 0;
-	public int arrangeIterations = 50;
-
 	public bool paused;
+	public bool stopped;
 
-	Network network;
+	Graph network;
 
 	public GameObject Sphere;
 	public GameObject Line;
@@ -31,76 +26,150 @@ public class Net : MonoBehaviour
 	public GameObject ForcedLeftSphere;
 	public GameObject ForcedRightSphere;
 
-	bool gameOver;
+	public GameObject InGameUi;
+	public GameObject InGameMenu;
 
-	float startTime1;
-	float startTime2;
+	Settings settings;
+
+	float startTime;
 
 	[DllImport ("libnano_shim.so")]
 	private static extern int connect ();
 
 	[DllImport ("libnano_shim.so")]
-	private static extern int sendSettings (string a, long b);
+	private static extern int send (string a, long b);
+
+	[DllImport ("libnano_shim.so")]
+	private static extern string receive ();
 
 	void Start()
 	{
-		gameOver = false;
-		paused = false;
-		startTime1 = Time.time;
-		startTime2 = Time.time;
+		startTime = Time.time;
 
 		// Get Settings
-		GameObject settings = GameObject.Find("Settings");
-		numNodes = settings.GetComponent<SettingsVars>().numNodes;
-		opinionRadius = settings.GetComponent<SettingsVars>().opinionRadius;
-		deltaOpinion = settings.GetComponent<SettingsVars>().deltaOp;
-		opIterations = settings.GetComponent<SettingsVars>().totalInteractions;
-		vizRadius = settings.GetComponent<SettingsVars>().vizRadius;
-		interactionType = settings.GetComponent<SettingsVars>().interactionType;
-		arrangeIterations = settings.GetComponent<SettingsVars>().arrangeIterations;
+		GameObject settingsGameObject = GameObject.Find("Settings");
+		settings = settingsGameObject.GetComponent<SettingsVars>().settings;
 
-		print("hi");
+		// Make nanomsg connection with backend
 		int r = connect();
-		print(r + " again");
-
-		String msg = "{ \"messageType\" : \"settings\", \"settings\" : { \"numNodes\" : 100, \"interactionType\" : 1 } }";
-		r = sendSettings(msg, msg.Length);
+		Debug.Log(r + " connected.");
+		
+		// Turn settings into JSON string
+		string settingsJsonString = settings.GetJsonForBackendSettings();
+		string settingsMessage = JsonToMessageString("settings", settingsJsonString);
+		
+		// Send settings JSON string to backend over nanomsg connection
+		r = send(settingsMessage, settingsMessage.Length);
 		Debug.Log(r + " sent settings");
-		// 1. Pass settings to back end
-		// 2. Ask backend to pass back generated network
 
-		GenerateObjects(network, arrangeIterations);
-		// 3. Tell backend to start model
+		// Listen for backend sending generated network
+		// TODO DEBUG
+		Graph net = new Graph();
 
+		receive();
+		//string netJson = receive();
+		//print(netJson);
+		//BackendMessage nodeMsg = JsonUtility.FromJson<BackendMessage>(netJson);
+		//Node[] nodeArr = nodeMsg.GetNodes();
+		//foreach(Node node in nodeArr)
+		//{
+		//	net.nodes[node.id] = node;
+		//}
+
+		//netJson = receive();
+		//print(netJson);
+		//BackendMessage edgeMsg = JsonUtility.FromJson<BackendMessage>(netJson);
+		//Edge[] edgeArr = edgeMsg.GetEdges();
+		//foreach(Edge edge in edgeArr)
+		//{
+		//	net.edges[edge.id] = edge;
+		//}
+
+		// Generate visualisation of network
+		GenerateObjects(network, settings.arrangeIterations);
+
+		// Find paused event in InGameUi and subscribe PauseSim() to it
+		InGameUi.GetComponent<InGameUi>().pause.AddListener(PauseSim);
+		// Find continue event in InGameMenu and subscribe StartSim() to it
+		InGameMenu.GetComponent<InGameMenu>().continue_.AddListener(StartSim);
+		// Find stop event in InGameMenu and subscribe StopSim() to it
+		InGameMenu.GetComponent<InGameMenu>().stop.AddListener(StopSim);
+
+		// Tell backend to start model
+		StartSim();
+
+		// Begin coroutine for recieving node state updates
+		StartCoroutine(nodeStateUpdates());
 	}
 
 	void Update()
 	{
-		// 1. Check for pause/start/stop, and send to back end
-
-		// 2. Check for forced nodes and send to backend
-
-		// WATCH REARRANGMENT
-
-		//if (Time.time - startTime > 0.2f)
-		//{
-			//print("Rearrange");
-			//DestroyLines();
-			//RearrangeObjects(network, 1, frameX/10);
-			//GenerateLines(network.edges);
-			//startTime = Time.time;
-		//}
-
-		// Limit frameRate
-		if (Time.time - startTime1 > 0.1f)
+		if(!paused)
 		{
-			ColorSpheres(network.nodes);
-			startTime1 = Time.time;
+			// Check for forced nodes and send to backend
+			Dictionary<int, float> forcing = ForceOpinion(ForcedLeftSphere, ForcedRightSphere);
+			if (forcing.Count != 0)
+			{
+				// Create JSON string for dict and send to backend
+				string forcingJsonString = NodesDictToJsonString(forcing);
+				string forcingMessage = JsonToMessageString("forcing", forcingJsonString);
+				int r = send(forcingMessage, forcingMessage.Length);
+				Debug.Log(r + " sent forcing");
+			}
+
+			// With limited update rate, update the color of the spheres
+			if (Time.time - startTime > 0.1f)
+			{
+				ColorSpheres(network.nodes);
+				startTime = Time.time;
+			}
 		}
 	}
 
-	public void ForceOpinion(GameObject ForcedLeftSphere, GameObject ForcedRightSphere)
+	private IEnumerator nodeStateUpdates()
 	{
+		while(!stopped)
+		{
+			// 1. Receive JSON string from c function
+			string nodeJson = receive();
+			// 2. Parse and deserialize
+			// 3. Set net.nodes equal to new list
+			yield return null;
+		}
+		yield return null;
+	}
+
+	public void PauseSim()
+	{
+		paused = true;
+		string pauseJson = "{ \"messageType\" : \"pause\" }";
+		int r = send(pauseJson, pauseJson.Length);
+		Debug.Log(r + " sent pause");
+	}
+
+	public void StartSim()
+
+	{
+		paused = false;
+		stopped = false;
+		string startJson = "{ \"messageType\" : \"start\" }";
+		int r = send(startJson, startJson.Length);
+		Debug.Log(r + " sent start");
+	}
+
+	public void StopSim()
+	{
+		stopped = true;
+		string stopJson = "{ \"messageType\" : \"stop\" }";
+		int r = send(stopJson, stopJson.Length);
+		Debug.Log(r + " sent stop");
+	}
+
+	// TODO debug
+	public Dictionary<int, float> ForceOpinion(GameObject ForcedLeftSphere, GameObject ForcedRightSphere)
+	{
+		var forcedNodes = new Dictionary<int, float>();
+
 		// Check forcing
 		int n = ForcedLeftSphere.transform.childCount;
 		bool check = (n!=0);
@@ -111,7 +180,7 @@ public class Net : MonoBehaviour
 			{
 				GameObject clickedNode = ForcedLeftSphere.transform.GetChild(j).gameObject;
 				int id = IdFromName(clickedNode.name);
-				network.nodes[id].opinion = 1f;
+				forcedNodes.Add(id, 1f);
 				clickedNode.transform.parent = transform;
 			}
 		}
@@ -126,11 +195,11 @@ public class Net : MonoBehaviour
 			{
 				GameObject rightClickedNode = ForcedRightSphere.transform.GetChild(j).gameObject;
 				int id = IdFromName(rightClickedNode.name);
-				network.nodes[id].opinion = 0f;
+				forcedNodes.Add(id, 0f);
 				rightClickedNode.transform.parent = transform;
 			}
 		}
-
+		return forcedNodes;
 	}
 
 	int IdFromName(string name)
@@ -140,13 +209,13 @@ public class Net : MonoBehaviour
 
 	void GenerateSphere(float opinion, int id)
 	{
-		Vector3 randomSpawnPosition = new Vector3(vizRadius+1, vizRadius+1, vizRadius+1);
-		while (randomSpawnPosition.magnitude > vizRadius)
+		Vector3 randomSpawnPosition = new Vector3(settings.vizRadius+1, settings.vizRadius+1, settings.vizRadius+1);
+		while (randomSpawnPosition.magnitude > settings.vizRadius)
 		{
 			randomSpawnPosition = new Vector3(
-							UnityEngine.Random.Range(-vizRadius,vizRadius),
-							UnityEngine.Random.Range(-vizRadius,vizRadius),
-							UnityEngine.Random.Range(-vizRadius,vizRadius));
+							UnityEngine.Random.Range(-settings.vizRadius,settings.vizRadius),
+							UnityEngine.Random.Range(-settings.vizRadius,settings.vizRadius),
+							UnityEngine.Random.Range(-settings.vizRadius,settings.vizRadius));
 		}
 		GameObject newSphere = (GameObject) Instantiate(Sphere,
 								randomSpawnPosition,
@@ -215,21 +284,21 @@ public class Net : MonoBehaviour
 		}
 	}
 
-	void GenerateObjects(Network net, int arrangeIterations)
+	void GenerateObjects(Graph net, int arrangeIterations)
 	{
 		// Generate Spheres for nodes
 		GenerateSpheres(net.nodes);
 
 		// Rearrange Nodes and edges
-		RearrangeObjects(net, arrangeIterations, vizRadius/10);
+		RearrangeObjects(net, arrangeIterations, settings.vizRadius/10);
 
 		// Generate Lines for edges
 		GenerateLines(net.edges);
 	}
 
-	void RearrangeObjects(Network net, int iterations, float t)
+	void RearrangeObjects(Graph net, int iterations, float t)
 	{
-		float area = 4f/3f*Mathf.PI*Mathf.Pow(vizRadius,2f);
+		float area = 4f/3f*Mathf.PI*Mathf.Pow(settings.vizRadius,2f);
 		float k = Mathf.Pow(area/net.nodes.Count,1f/3f);
 		float fa(float x) {
 			return Mathf.Pow(x,3f)/k;
@@ -290,126 +359,38 @@ public class Net : MonoBehaviour
 				Vector3 newPos 	= pos[vId].position 
 						+ disp[vId].normalized
 						* Mathf.Min(disp[vId].magnitude,t);
-				float newMagnitude = Mathf.Min(newPos.magnitude, vizRadius);
+				float newMagnitude = Mathf.Min(newPos.magnitude, settings.vizRadius);
 				newPos = newPos.normalized*newMagnitude;
 				pos[vId].SetPositionAndRotation(newPos, Quaternion.identity);
-				//pos[vId].SetPositionAndRotation(Vector3.zero, Quaternion.identity);
 			}
 			// Reduce temperature as layout approaches a better configuration
 			t = t*0.98f;
 		}
 	}
 
-	class Network
+	string NodesDictToJsonString (Dictionary<int, float> nodes)
 	{
-		//Network variables
-		public Dictionary<int, Node> nodes;
-		public Dictionary<int, Edge> edges;
-
-		//Constructor
-		public Network(int numNodes)
-		{
-			nodes = new Dictionary<int, Node>();
-			edges = new Dictionary<int, Edge>();
-			
-			// Barabasi-Albert generation
-			for(int n=0;n<numNodes;n++)
-			{
-				// Generate node id
-				int id = n;
-
-				// Generate initial opinion
-				float opinion = UnityEngine.Random.Range(0f,1f);
-
-				// Generate node and add to nodes list
-				Node newNode = new Node(id, opinion);
-				nodes.Add(id, newNode);
-
-				// Generate edges for that node
-				if (nodes.Count == 2)
-				{
-					// Generate edge id
-					int edgeId = edges.Count;
-
-					// Get the two node ids
-					int[] ids = new int[nodes.Keys.Count];
-					nodes.Keys.CopyTo(ids,0);
-
-					Edge newEdge = new Edge(edgeId, ids[1], ids[0]);
-					edges.Add(edgeId, newEdge);
-					nodes[ids[1]].outDegree += 1;
-					nodes[ids[0]].inDegree += 1;
-				} 
-				else if (nodes.Count > 2) 
-				{
-					foreach(KeyValuePair<int, Node> node in nodes)
-					{
-						float r = UnityEngine.Random.Range(0f,1f);
-						float inDegreeAdj = node.Value.inDegree+1;
-						float sumOfAllDegrees = edges.Count+nodes.Count;
-						float p = inDegreeAdj/sumOfAllDegrees;
-						if(r < p)
-						{
-							// Generate edge id
-							int edgeId = edges.Count;
-
-							Edge newEdge = new Edge(edgeId,
-										id,
-										node.Key);
-							edges.Add(edgeId, newEdge);
-							nodes[id].outDegree += 1;
-							node.Value.inDegree += 1;
-						}
-					}
-				}
-			}
+		string str = "{";
+		foreach(KeyValuePair<int, float> node in nodes)
+		{  
+			str += "\"" + node.Key.ToString() + "\"";
+			str += ":";
+			str += "\"" + node.Value.ToString() + "\"";
+			str += ",";
 		}
-		public float GetMeanOpinion()
-		{
-			float m = 0;
-			for(int i=0;i<nodes.Count;i++)
-			{
-				m+= nodes[i].opinion;
-			}
-			m = m/nodes.Count;
-			return m;
-		}
+		str += "}";
+		return str;
 	}
 
-	public class Node
+	string JsonToMessageString (string messageType, string json)
 	{
-		//Node variables
-		public int id;
-		public float opinion;
-
-		//Node analytics variables (perhaps should be in network somehow
-		public int inDegree;
-		public int outDegree;
-
-		//Constructor
-		public Node(int idNumber, float opinionFloat)
-		{
-			id = idNumber;
-			opinion = opinionFloat;
-			inDegree = 0;
-			outDegree = 0;
-		}
+		string str = "{";
+		str += "\"messageType\":" + "\"" + messageType + "\"";
+		str += ",";
+		str += "\"" + messageType + "\"";
+		str += ":";
+		str += json;
+		str += "}";
+		return str;
 	}
-
-	public class Edge
-	{
-		//Edge variables
-		public int id;
-		public int fromNodeId;
-		public int toNodeId;
-
-		//Constructor
-		public Edge(int idNumber, int fromId, int toId)
-		{
-			id = idNumber;
-			fromNodeId = fromId;
-			toNodeId = toId;
-		}
-	}
-
 }

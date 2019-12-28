@@ -4,4 +4,4 @@ authors "Joseph Colvin"
 copyright "Copyright © 2019, Joseph Colvin"
 license "proprietary"
 dependency "nanomsg-wrapper" version="~>0.5.3"
-
+dependency "asdf" version="~>0.5.3"
