@@ -30,7 +30,7 @@ void main()
 	//string str = BackendMessage.fromNetwork(BackendMessageType.nodes, network).jsonString;
 	//frontendSocket.send(BackendMessage.fromNetwork(BackendMessageType.nodes, network).jsonString);
 	frontendSocket.send("Ping");
-	//writeln(str);
+	writeln(__LINE__);
 	//str = BackendMessage.fromNetwork(BackendMessageType.edges, network).jsonString;
 	//frontendSocket.send(BackendMessage.fromNetwork(BackendMessageType.edges, network).jsonString);
 	frontendSocket.waitForStartMessage();

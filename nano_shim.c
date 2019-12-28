@@ -48,7 +48,7 @@ char* receive()
 	fprintf(logFile, "%s\n", "receive()");
 	char* msg;
 	void* buf = NULL;
-	int n_bytes = nn_recv(backendSocket, buf, NN_MSG, 0);
+	int n_bytes = nn_recv(backendSocket, &buf, NN_MSG, 0);
 	if (n_bytes < 0)
 	{
 		int errCode = nn_errno();
