@@ -22,17 +22,14 @@ void main()
 
 	auto settings = settingsMessage.settings;
 
-	writeln(settings);
+	writeln(settings.numNodes);
 
 	auto network = new Network(settings.numNodes);
 
-	// TODO send nodes and edges as lists
-	//string str = BackendMessage.fromNetwork(BackendMessageType.nodes, network).jsonString;
-	//frontendSocket.send(BackendMessage.fromNetwork(BackendMessageType.nodes, network).jsonString);
-	frontendSocket.send("Ping");
+	BackendMessage instMsg = BackendMessage.fromNetwork(BackendMessageType.instantiate, network);
+	frontendSocket.send(serializeToJson(instMsg));
 	writeln(__LINE__);
-	//str = BackendMessage.fromNetwork(BackendMessageType.edges, network).jsonString;
-	//frontendSocket.send(BackendMessage.fromNetwork(BackendMessageType.edges, network).jsonString);
+
 	frontendSocket.waitForStartMessage();
 	writeln(__LINE__);
 
@@ -57,14 +54,16 @@ void main()
 			}
 		}
 
-		//updateOpinion();
+		updateOpinion(settings, network);
 		import std.stdio;
-		writeln("HI");
 		import core.thread : Thread;
 		import core.time : dur;
-		Thread.sleep(1.dur!"seconds");
+		Thread.sleep(10.dur!"msecs");
 
-		// TODO: send updates to frontend
+		// Send updates to frontend
+		BackendMessage updateMsg = BackendMessage.fromNetwork(BackendMessageType.update,
+									network);
+		frontendSocket.send(serializeToJson(updateMsg));
 	}
 }
 
@@ -131,40 +130,32 @@ struct FrontendMessage
 
 enum BackendMessageType
 {
-	nodes,
-	edges
+	instantiate,
+	update
 }
 
 struct BackendMessage
 {
-	import std.json;
-	import asdf;
-
 	BackendMessageType messageType;
-	string jsonString;
 	Node[] nodes;
 	Edge[] edges;
 	static BackendMessage fromNetwork(BackendMessageType type, Network net)
 	{
 		BackendMessage msg;
 		msg.messageType = type;
-		JSONValue jj;
 		switch (type)
 		{
-			case BackendMessageType.nodes:
+			case BackendMessageType.instantiate:
 				msg.nodes = net.nodes.values;
-				jj = ["messageType":"nodes"];
-				jj.object["nodes"] = parseJSON(msg.nodes.serializeToJson());
-				break;
-			case BackendMessageType.edges:
 				msg.edges = net.edges.values;
-				jj = ["messageType":"edges"];
-				jj.object["edges"] = parseJSON(msg.edges.serializeToJson());
+				break;
+			case BackendMessageType.update:
+				msg.nodes = net.nodes.values;
+				msg.edges = net.edges.values;
 				break;
 			default:
 				throw new Exception("Unexpected BackendMessageType");
 		}
-		msg.jsonString = jj.toString;
 		return msg;
 	}
 }
@@ -181,15 +172,15 @@ struct Settings
 
 	static Settings fromJson(JSONValue json)
 	{
-		return Settings(cast(int) json["interactionType"].integer, 
-				cast(int) json["numNodes"].integer,
+		return Settings(cast(int) json["numNodes"].integer,
 				cast(int) json["totalInteractions"].integer,
+				cast(int) json["interactionType"].integer,
 				cast(float) json["opinionRadius"].floating,
 				cast(float) json["deltaOp"].floating);
 	}
 }
 
-void updateOpinion(Settings settings, Network net, float radius, float deltaOp)
+void updateOpinion(Settings settings, Network net)
 {
 	foreach (edgeValue; net.edges.byValue)
 	{
@@ -197,26 +188,26 @@ void updateOpinion(Settings settings, Network net, float radius, float deltaOp)
 		Node toNode = net.nodes[edgeValue.toNodeId];
 		float fromOp = fromNode.opinion;
 		float toOp = toNode.opinion;
-		auto opPair = opinionInteraction(settings, fromOp, toOp, radius, deltaOp);
+		auto opPair = opinionInteraction(settings, fromOp, toOp);
 		fromNode.opinion = opPair[0];
 		toNode.opinion = opPair[1];
 	}
 }
 
-auto opinionInteraction(Settings settings, float fromOp, float toOp, float radius, float deltaOp)
+auto opinionInteraction(Settings settings, float fromOp, float toOp)
 {
 	import std.typecons : tuple;
 	import std.math : abs, sgn;
 	import std.algorithm : min, max;
 
-	// If within radius, fromOp moves deltaOp towards toOp
+	// If within settings.opinionRadius, fromOp moves settings.deltaOp towards toOp
 	// Otherwise, both opinions stay the same
 	// Opinions stay in interval (0,1)
 	if (settings.interactionType == 0)
 	{
-		if (abs(fromOp - toOp) < radius)
+		if (abs(fromOp - toOp) < settings.opinionRadius)
 		{
-			fromOp += sgn(toOp - fromOp) * deltaOp;
+			fromOp += sgn(toOp - fromOp) * settings.deltaOp;
 			fromOp = min(1f, fromOp);
 			fromOp = max(0f, fromOp);
 		}
@@ -224,11 +215,11 @@ auto opinionInteraction(Settings settings, float fromOp, float toOp, float radiu
 	}
 	else if (settings.interactionType == 1)
 	{
-		if (abs(fromOp - toOp) < radius)
+		if (abs(fromOp - toOp) < settings.opinionRadius)
 		{
-			float newFromOp = fromOp + sgn(toOp - fromOp) * deltaOp;
-			float newToOp = toOp + sgn(fromOp - toOp) * deltaOp;
-			//fromOp += sgn(toOp-fromOp)*deltaOp;
+			float newFromOp = fromOp + sgn(toOp - fromOp) * settings.deltaOp;
+			float newToOp = toOp + sgn(fromOp - toOp) * settings.deltaOp;
+			//fromOp += sgn(toOp-fromOp)*settings.deltaOp;
 			fromOp = newFromOp;
 			fromOp = min(1f, fromOp);
 			fromOp = max(0f, fromOp);
@@ -241,11 +232,11 @@ auto opinionInteraction(Settings settings, float fromOp, float toOp, float radiu
 	}
 	else if (settings.interactionType == 2)
 	{
-		if (abs(fromOp - toOp) < radius)
+		if (abs(fromOp - toOp) < settings.opinionRadius)
 		{
-			float newFromOp = fromOp + sgn(toOp - fromOp) * deltaOp;
-			float newToOp = toOp + sgn(fromOp - toOp) * deltaOp;
-			//fromOp += sgn(toOp-fromOp)*deltaOp;
+			float newFromOp = fromOp + sgn(toOp - fromOp) * settings.deltaOp;
+			float newToOp = toOp + sgn(fromOp - toOp) * settings.deltaOp;
+			//fromOp += sgn(toOp-fromOp)*settings.deltaOp;
 			fromOp = newFromOp;
 			fromOp = min(1f, fromOp);
 			fromOp = max(0f, fromOp);
@@ -256,9 +247,9 @@ auto opinionInteraction(Settings settings, float fromOp, float toOp, float radiu
 		}
 		else
 		{
-			float newFromOp = fromOp - sgn(toOp - fromOp) * deltaOp;
-			float newToOp = toOp - sgn(fromOp - toOp) * deltaOp;
-			//fromOp += sgn(toOp-fromOp)*deltaOp;
+			float newFromOp = fromOp - sgn(toOp - fromOp) * settings.deltaOp;
+			float newToOp = toOp - sgn(fromOp - toOp) * settings.deltaOp;
+			//fromOp += sgn(toOp-fromOp)*settings.deltaOp;
 			fromOp = newFromOp;
 			fromOp = min(1f, fromOp);
 			fromOp = max(0f, fromOp);

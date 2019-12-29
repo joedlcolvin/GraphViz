@@ -51,9 +51,12 @@ public class SettingsVars : MonoBehaviour
 	{
 		foreach(FieldInfo fi in settings.GetType().GetFields())
 		{
+			print(fi.Name);
 			Slider slider = GameObject.Find(fi.Name).GetComponent<Slider>();
 			Text text = GameObject.Find(fi.Name + "ValueText").GetComponent<Text>();
-			slider.value = (float) fi.GetValue(settings);
+			print(fi.GetValue(settings).GetType());
+			//print((float) fi.GetValue(settings));
+			slider.value = Convert.ToSingle(fi.GetValue(settings));
 			text.text = fi.GetValue(settings).ToString();
 			slider.onValueChanged.AddListener(delegate {SetSetting(fi, slider, text);});
 		}
@@ -62,6 +65,7 @@ public class SettingsVars : MonoBehaviour
 	public void SetSetting(FieldInfo fi, Slider slider, Text text)
 	{
 		fi.SetValue(settings, Convert.ChangeType(slider.value, fi.FieldType));
+		print(fi.GetValue(settings));
 		text.text = fi.GetValue(settings).ToString();
 	}
 }

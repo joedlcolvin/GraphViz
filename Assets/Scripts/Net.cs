@@ -8,6 +8,7 @@ using UnityEngine.Events;
 using System;
 using System.Runtime.InteropServices;
 using System.Reflection;
+using Newtonsoft.Json;
 using MyClasses;
 
 public class Net : MonoBehaviour
@@ -64,29 +65,24 @@ public class Net : MonoBehaviour
 
 		// Listen for backend sending generated network
 		// TODO DEBUG
-		Graph net = new Graph();
+		network = new Graph();
 
-		receive();
-		//string netJson = receive();
-		//print(netJson);
-		//BackendMessage nodeMsg = JsonUtility.FromJson<BackendMessage>(netJson);
-		//Node[] nodeArr = nodeMsg.GetNodes();
-		//foreach(Node node in nodeArr)
-		//{
-		//	net.nodes[node.id] = node;
-		//}
-
-		//netJson = receive();
-		//print(netJson);
-		//BackendMessage edgeMsg = JsonUtility.FromJson<BackendMessage>(netJson);
-		//Edge[] edgeArr = edgeMsg.GetEdges();
-		//foreach(Edge edge in edgeArr)
-		//{
-		//	net.edges[edge.id] = edge;
-		//}
+		string netJson = receive();
+		print(netJson);
+		BackendMessage instantiateMsg = JsonConvert.DeserializeObject<BackendMessage>(netJson);
+		foreach(Node node in instantiateMsg.nodes)
+		{
+			network.nodes.Add(node.id, node);
+		}
+		foreach(Edge edge in instantiateMsg.edges)
+		{
+			network.edges.Add(edge.id, edge);
+		}
 
 		// Generate visualisation of network
-		GenerateObjects(network, settings.arrangeIterations);
+		// arrIter = settings.arrangeIterations;
+		int arrIter = 500;
+		GenerateObjects(network, arrIter);
 
 		// Find paused event in InGameUi and subscribe PauseSim() to it
 		InGameUi.GetComponent<InGameUi>().pause.AddListener(PauseSim);
@@ -130,10 +126,12 @@ public class Net : MonoBehaviour
 	{
 		while(!stopped)
 		{
-			// 1. Receive JSON string from c function
-			string nodeJson = receive();
-			// 2. Parse and deserialize
-			// 3. Set net.nodes equal to new list
+			string netJson = receive();
+			BackendMessage updateMsg = JsonConvert.DeserializeObject<BackendMessage>(netJson);
+			foreach(Node node in updateMsg.nodes)
+			{
+				network.nodes[node.id] = node;
+			}
 			yield return null;
 		}
 		yield return null;

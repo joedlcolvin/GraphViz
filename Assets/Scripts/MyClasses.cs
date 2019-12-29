@@ -1,4 +1,7 @@
+using System;
+using UnityEngine;
 using System.Collections.Generic;
+
 
 namespace MyClasses
 {
@@ -7,7 +10,7 @@ namespace MyClasses
 		public int numNodes;
 		public int totalInteractions;
 		public int interactionType;
-		public int arrangeIterations;
+		//public int arrangeIterations;
 		public float opinionRadius;
 		public float deltaOp;
 		public float vizRadius;
@@ -17,7 +20,7 @@ namespace MyClasses
 			this.numNodes = 100;
 			this.totalInteractions = 10000;
 			this.interactionType = 2;
-			this.arrangeIterations = 50;
+			//this.arrangeIterations = 50;
 			this.opinionRadius = 0.6f;
 			this.deltaOp = 0.01f;
 			this.vizRadius = 10f;
@@ -52,39 +55,9 @@ namespace MyClasses
 	
 	public class BackendMessage
 	{
-		BackendMessageType messageType;
-		object[] arr;
-
-		public Node[] GetNodes()
-		{
-			Node[] nodes = new Node[arr.Length];
-			if(messageType == BackendMessageType.Nodes)
-			{
-				for(int i=0;i<arr.Length;i++)
-				{
-					nodes[i] = (Node)arr[i];
-				}
-			}
-			return (Node[]) arr;
-		}
-		public Edge[] GetEdges()
-		{
-			Edge[] edges = new Edge[arr.Length];
-			if(messageType == BackendMessageType.Edges)
-			{
-				for(int i=0;i<arr.Length;i++)
-				{
-					edges[i] = (Edge)arr[i];
-				}
-			}
-			return (Edge[]) arr;
-		}
-	}
-
-	enum BackendMessageType
-	{
-		Nodes,
-		Edges
+		public string messageType { get; set; }
+		public List<Node> nodes{ get; set; }
+		public List<Edge> edges{ get; set; }
 	}
 
 	class Graph
@@ -92,6 +65,12 @@ namespace MyClasses
 		//Graph variables
 		public Dictionary<int, Node> nodes;
 		public Dictionary<int, Edge> edges;
+
+		public Graph()
+		{
+			this.nodes = new Dictionary<int, Node>();
+			this.edges = new Dictionary<int, Edge>();
+		}
 
 		public float GetMeanOpinion()
 		{
@@ -108,19 +87,19 @@ namespace MyClasses
 	public class Node
 	{
 		//Node variables
-		public int id;
-		public float opinion;
+		public int id{ get; set; }
+		public float opinion{ get; set; }
 
 		//Node analytics variables (perhaps should be in network somehow
-		public int inDegree;
-		public int outDegree;
+		public int inDegree{ get; set; }
+		public int outDegree{ get; set; }
 	}
 
 	public class Edge
 	{
 		//Edge variables
-		public int id;
-		public int fromNodeId;
-		public int toNodeId;
+		public int id{ get; set; }
+		public int fromNodeId{ get; set; }
+		public int toNodeId{ get; set; }
 	}
 }

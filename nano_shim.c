@@ -2,6 +2,7 @@
 #include <nanomsg/pair.h>
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 
 int backendSocket;
 FILE *logFile;
@@ -36,30 +37,26 @@ int send(char* jsonString, size_t length)
 	{
 		int errCode = nn_errno();
 		fprintf(logFile, "%d %s\n", errCode, nn_strerror(errCode));
-		fclose(logFile);
 		return -1;
 	}
-	fclose(logFile);
 	return 0;
 }
 
 char* receive()
 {
 	fprintf(logFile, "%s\n", "receive()");
-	char* msg;
+	char* msg = NULL;
 	void* buf = NULL;
 	int n_bytes = nn_recv(backendSocket, &buf, NN_MSG, 0);
 	if (n_bytes < 0)
 	{
 		int errCode = nn_errno();
 		fprintf(logFile, "%d %s\n", n_bytes, nn_strerror(errCode));
-		fclose(logFile);
 	}
 	else
 	{
-		msg = (char *)buf;
+		msg = strndup(buf, n_bytes);
 		fprintf(logFile, "%s\n", msg);
-		fclose(logFile);
 	}
 	return msg;
 }
